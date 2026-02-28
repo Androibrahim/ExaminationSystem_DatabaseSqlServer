@@ -13,7 +13,8 @@ MinDegree int not null ,
 constraint pkCourse_CourseId primary key(CourseId) , 
 constraint checkCourse_NameNotWhiteSpace check(len(LTRIM(RTRIM(Name))) > 0 ) , 
 ) 
-
+alter table Academic.Course
+add constraint uniqueCourse_Name unique(Name)
 
 drop table Academic.Course
 
@@ -50,6 +51,9 @@ constraint fkIntake_TrackId foreign key (TrackId) references CoreSystem.Track (T
 on delete cascade on update cascade , 
 
 )
+alter table Academic.Intake
+add constraint uniqueIntake_NamePerTrack unique(Name , TrackId)
+
 
 create table Academic.Class(
 ClassId int identity(1,1) not null , 
@@ -61,7 +65,8 @@ constraint checkClass_NameNotWhiteSpace check(len(LTRIM(RTRIM(Name))) > 0 ) ,
 constraint fkClass_IntakeId foreign key (IntakeId) references Academic.Intake(IntakeId)
 on delete cascade on update cascade , 
 )
-
+alter table Academic.Class
+add constraint uniqueClass_NamePerIntake unique(Name , IntakeId)
 
 
 

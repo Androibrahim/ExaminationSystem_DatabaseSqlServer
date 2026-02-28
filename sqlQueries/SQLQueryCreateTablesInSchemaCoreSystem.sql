@@ -86,7 +86,8 @@ Name nvarchar(50) not null ,
 constraint pkDepartment_DepartmentId primary key(DepartmentId) , 
 constraint checkDepartment_NameNotWhiteSpace check( len(LTRIM(RTRIM(Name))) > 0 )
 )
-
+alter table CoreSystem.Department 
+add constraint uniqueDepartment_Name unique (name)
 drop Table CoreSystem.Department
 
 
@@ -96,7 +97,6 @@ drop Table CoreSystem.Department
 create table CoreSystem.Branch(
 BranchId int identity(1,1) not null , 
 Name nvarchar(50) not null , 
-phone varchar(50) null , 
 DepartmentId int not null , 
 
 constraint pkBranch_BranchId primary key(BranchId),
@@ -105,6 +105,9 @@ constraint fkBranch_DepartmentId foreign key(DepartmentId) references CoreSystem
 on delete cascade on update cascade , 
 
 ) 
+alter table CoreSystem.Branch 
+add constraint uniqueBranch_NamePerDepartment unique(Name ,DepartmentId )
+
 
 drop table CoreSystem.Branch
 -- alter phone len by spesfic country 
@@ -121,6 +124,9 @@ constraint checkTrack_NameNotWhiteSpace check(len(LTRIM(RTRIM(Name))) > 0 ) ,
 constraint fkTrack_BranchId foreign key(BranchId) references CoreSystem.Branch(BranchId)
 on delete cascade on update cascade , 
 )
+alter table CoreSystem.Track
+add constraint uniqueTrackPerBranch unique (Name , BranchId)
+
 
 drop table CoreSystem.Track
 
