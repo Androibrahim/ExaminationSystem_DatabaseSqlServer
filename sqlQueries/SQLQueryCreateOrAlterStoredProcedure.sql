@@ -385,11 +385,12 @@ BEGIN
 	BEGIN THROW 50001, 'Access Denied', 1; RETURN; 	END
 
 
-	-- Check that Instructor owns the Exam
-    IF NOT EXISTS (
-        SELECT 1 FROM ExamSystem.Exam
-        WHERE ExamId = @ExamId AND InstructorId = @ExecutingUserId )
-    BEGIN THROW 50001, 'Access Denied - You do not own this exam.', 1; return; END
+-- Check that Instructor owns the Exam
+IF NOT EXISTS (SELECT 1 FROM ExamSystem.Exam e
+    INNER JOIN Academic.Instructor i ON i.InstructorId = e.InstructorId
+    WHERE e.ExamId = @ExamId AND i.UserId = @ExecutingUserId
+)
+BEGIN THROW 50001, 'Access Denied - You do not own this exam.', 1;  RETURN; END
 
     IF NOT EXISTS (
         SELECT 1 FROM ExamSystem.StudentExam
@@ -560,6 +561,30 @@ BEGIN
 END
 GO
 
+
+
+CREATE OR ALTER PROCEDURE Academic.usp_AddClass
+    @ExecutingUserId INT,
+    @Name            NVARCHAR(50),
+    @IntakeId        INT,
+    @NewClassId      INT OUTPUT
+AS
+BEGIN
+    -- Check Role ( 1 = Admin)
+    IF [CoreSystem].[fn_CheckUserRole](@ExecutingUserId, 1) = 0
+    BEGIN THROW 50001, 'Access Denied', 1;RETURN;END
+
+    -- check if exist in track
+    IF NOT EXISTS (SELECT 1 FROM Academic.Intake WHERE IntakeId = @IntakeId)
+    BEGIN THROW 50002, 'Invalid IntakeId', 1; RETURN;  END
+
+    INSERT INTO Academic.Class (Name, IntakeId)
+    VALUES (@Name, @IntakeId);
+
+    SET @NewClassId = SCOPE_IDENTITY();
+END
+GO
+
 -- ============================================================
 --  SECTION 5 – Question Pool Management
 -- ============================================================
@@ -576,10 +601,15 @@ BEGIN
     IF [CoreSystem].[fn_CheckUserRole](@ExecutingUserId, 2) = 0
 	BEGIN THROW 50001, 'Access Denied', 1; RETURN; 	END
 
-	--Check Instructor teaches this Course
-    IF NOT EXISTS ( SELECT 1 FROM Academic.CourseOffering as co
-        WHERE co.InstructorId = @ExecutingUserId AND co.CourseId = @CourseId )
-    BEGIN THROW 50001, 'Access Denied - You do not teach this course.', 1; return;  END
+
+-- Check Instructor teaches this Course
+IF NOT EXISTS (SELECT 1 FROM Academic.CourseOffering co
+               INNER JOIN Academic.Instructor i ON co.InstructorId = i.InstructorId
+               WHERE i.UserId = @ExecutingUserId AND co.CourseId = @CourseId )
+BEGIN   THROW 50001, 'Access Denied - You do not teach this course.', 1;   RETURN;  END
+   
+  
+
         
     INSERT INTO ExamSystem.QuestionPool (Question, QustionTypeId, CourseId)
     VALUES (@Question, @QuestionTypeId, @CourseId);
@@ -599,11 +629,12 @@ BEGIN
     IF [CoreSystem].[fn_CheckUserRole](@ExecutingUserId, 2) = 0
 	BEGIN THROW 50001, 'Access Denied', 1; RETURN; 	END
 
-	--Check Instructor teaches this Course when updating question
-    IF NOT EXISTS (SELECT 1 FROM ExamSystem.QuestionPool qp
-    JOIN Academic.CourseOffering co ON co.CourseId = qp.CourseId
-    WHERE qp.QuestionId = @QuestionId AND co.InstructorId = @ExecutingUserId )
-    BEGIN THROW 50001, 'Access Denied - You do not teach this course.', 1; return;  END
+-- Check Instructor teaches this Course when updating question
+IF NOT EXISTS (SELECT 1 FROM ExamSystem.QuestionPool qp
+               INNER JOIN Academic.CourseOffering co ON co.CourseId = qp.CourseId
+               INNER JOIN Academic.Instructor i ON co.InstructorId = i.InstructorId
+               WHERE qp.QuestionId = @QuestionId AND i.UserId = @ExecutingUserId )
+BEGIN THROW 50001, 'Access Denied - You do not teach this course.', 1; RETURN; END
 
     -- Prevent update if question is in an active exam
     IF EXISTS (
@@ -634,11 +665,12 @@ BEGIN
 	BEGIN THROW 50001, 'Access Denied', 1; RETURN; 	END
 
 
-	--Check Instructor teaches this Course when deleteting question
-    IF NOT EXISTS (SELECT 1 FROM ExamSystem.QuestionPool qp
-    JOIN Academic.CourseOffering co ON co.CourseId = qp.CourseId
-    WHERE qp.QuestionId = @QuestionId AND co.InstructorId = @ExecutingUserId )
-    BEGIN THROW 50001, 'Access Denied - You do not teach this course.', 1; return;  END
+-- Check Instructor teaches this Course when updating question
+IF NOT EXISTS (SELECT 1 FROM ExamSystem.QuestionPool qp
+               INNER JOIN Academic.CourseOffering co ON co.CourseId = qp.CourseId
+               INNER JOIN Academic.Instructor i ON co.InstructorId = i.InstructorId
+               WHERE qp.QuestionId = @QuestionId AND i.UserId = @ExecutingUserId )
+BEGIN THROW 50001, 'Access Denied - You do not teach this course.', 1; RETURN; END
 
 
     IF EXISTS (
@@ -671,10 +703,11 @@ BEGIN
 
 
 	--Check Instructor teaches this Course when adding choice
-    IF NOT EXISTS (SELECT 1 FROM ExamSystem.QuestionPool qp
-    JOIN Academic.CourseOffering co ON co.CourseId = qp.CourseId
-    WHERE qp.QuestionId = @QuestionId AND co.InstructorId = @ExecutingUserId )
-    BEGIN THROW 50001, 'Access Denied - You do not teach this course.', 1; return;  END
+IF NOT EXISTS (SELECT 1 FROM ExamSystem.QuestionPool qp
+               INNER JOIN Academic.CourseOffering co ON co.CourseId = qp.CourseId
+               INNER JOIN Academic.Instructor i ON co.InstructorId = i.InstructorId
+               WHERE qp.QuestionId = @QuestionId AND i.UserId = @ExecutingUserId )
+BEGIN THROW 50001, 'Access Denied - You do not teach this course.', 1; RETURN; END
 
 
     INSERT INTO ExamSystem.Choice (ChoiceTxt, IsCorrect, QuestionId)
@@ -698,12 +731,13 @@ BEGIN
 	BEGIN THROW 50001, 'Access Denied', 1; RETURN; 	END
 
 
--- Check Instructor teaches the course of this choice
-	IF NOT EXISTS (SELECT 1 FROM ExamSystem.Choice c
-		JOIN ExamSystem.QuestionPool qp ON qp.QuestionId = c.QuestionId
-		JOIN Academic.CourseOffering co ON co.CourseId = qp.CourseId
-		WHERE c.ChoiceId = @ChoiceId AND co.InstructorId = @ExecutingUserId )
-	BEGIN  THROW 50001, 'Access Denied - You do not teach this course.', 1; RETURN;  END
+ -- Check Instructor teaches the course of this choice
+IF NOT EXISTS (SELECT 1 FROM ExamSystem.Choice c
+    INNER JOIN ExamSystem.QuestionPool qp  ON qp.QuestionId = c.QuestionId
+    INNER JOIN Academic.CourseOffering co ON co.CourseId = qp.CourseId
+    INNER JOIN Academic.Instructor i ON i.InstructorId = co.InstructorId
+    WHERE c.ChoiceId = @ChoiceId AND i.UserId = @ExecutingUserId)
+BEGIN  THROW 50001, 'Access Denied - You do not teach this course.', 1; RETURN;     END
 
     UPDATE ExamSystem.Choice
     SET    ChoiceTxt = ISNULL(@ChoiceTxt, ChoiceTxt),
@@ -723,12 +757,13 @@ BEGIN
 	BEGIN THROW 50001, 'Access Denied', 1; RETURN; 	END
 
 
--- Check Instructor teaches the course of this choice
-	IF NOT EXISTS (SELECT 1 FROM ExamSystem.Choice c
-		JOIN ExamSystem.QuestionPool qp ON qp.QuestionId = c.QuestionId
-		JOIN Academic.CourseOffering co ON co.CourseId = qp.CourseId
-		WHERE c.ChoiceId = @ChoiceId AND co.InstructorId = @ExecutingUserId )
-	BEGIN  THROW 50001, 'Access Denied - You do not teach this course.', 1; RETURN;  END
+ -- Check Instructor teaches the course of this choice
+IF NOT EXISTS (SELECT 1 FROM ExamSystem.Choice c
+    INNER JOIN ExamSystem.QuestionPool qp  ON qp.QuestionId = c.QuestionId
+    INNER JOIN Academic.CourseOffering co ON co.CourseId = qp.CourseId
+    INNER JOIN Academic.Instructor i ON i.InstructorId = co.InstructorId
+    WHERE c.ChoiceId = @ChoiceId AND i.UserId = @ExecutingUserId)
+BEGIN  THROW 50001, 'Access Denied - You do not teach this course.', 1; RETURN;     END
 
     DELETE FROM ExamSystem.Choice WHERE ChoiceId = @ChoiceId;
 END
@@ -755,6 +790,7 @@ CREATE OR ALTER PROCEDURE ExamSystem.usp_CreateExam
     @CourseId     INT,
     @ClassId      INT,
     @InstructorId INT,
+    @ExamTitle nvarchar(500),
     @NewExamId    INT OUTPUT
 AS
 BEGIN
@@ -763,10 +799,11 @@ BEGIN
 	BEGIN THROW 50001, 'Access Denied', 1; RETURN; 	END
 
 
-	--Check Instructor teaches this Course
-    IF NOT EXISTS ( SELECT 1 FROM Academic.CourseOffering as co
-        WHERE co.InstructorId = @ExecutingUserId AND co.CourseId = @CourseId )
-    BEGIN THROW 50001, 'Access Denied - You do not teach this course.', 1; return;  END
+-- Check Instructor teaches this Course
+IF NOT EXISTS (SELECT 1 FROM Academic.CourseOffering co
+               INNER JOIN Academic.Instructor i ON co.InstructorId = i.InstructorId
+               WHERE i.UserId = @ExecutingUserId AND co.CourseId = @CourseId )
+BEGIN   THROW 50001, 'Access Denied - You do not teach this course.', 1;   RETURN;  END
 
 
     -- Validate TotalDegree vs Course MaxDegree
@@ -776,9 +813,9 @@ BEGIN
     BEGIN throw 50001 , 'TotalDegree (%d) exceeds Course MaxDegree (%d).', 1; RETURN;  END
 
     INSERT INTO ExamSystem.Exam
-        (AcademicYear, StartTime, EndTime, TotalTime, TotalDegree, ExamTypeId, CourseId, ClassId, InstructorId)
+        (AcademicYear, StartTime, EndTime, TotalTime, TotalDegree, ExamTypeId, CourseId, ClassId, InstructorId ,  ExamTitle )
     VALUES
-        (@AcademicYear, @StartTime, @EndTime, @TotalTime, @TotalDegree, @ExamTypeId, @CourseId, @ClassId, @InstructorId);
+        (@AcademicYear, @StartTime, @EndTime, @TotalTime, @TotalDegree, @ExamTypeId, @CourseId, @ClassId, @InstructorId , @ExamTitle);
 
     SET @NewExamId = SCOPE_IDENTITY();
 END
@@ -795,17 +832,19 @@ CREATE OR ALTER PROCEDURE ExamSystem.usp_UpdateExam
     @EndTime     DATETIME2 = NULL,
     @TotalTime   TIME      = NULL,
     @TotalDegree INT       = NULL,
-    @ExamTypeId  INT       = NULL
+    @ExamTypeId  INT       = NULL,
+	@ExamTitle nvarchar(500)
 AS
 BEGIN
 
     IF [CoreSystem].[fn_CheckUserRole](@ExecutingUserId, 2) = 0
 	BEGIN THROW 50001, 'Access Denied', 1; RETURN; 	END
 
-	-- check if executing instructor who pu exam
-	if not exists (select 1 from ExamSystem.Exam as e 
-	where e.ExamId =@ExamId and e.InstructorId =@ExecutingUserId  )
-	begin throw 50001 , 'this instructor not put this exam' ,1 ; return ; end
+-- Check if executing instructor who put this exam
+IF NOT EXISTS (SELECT 1 FROM ExamSystem.Exam e
+    INNER JOIN Academic.Instructor i ON i.InstructorId = e.InstructorId
+    WHERE e.ExamId = @ExamId AND i.UserId = @ExecutingUserId )
+BEGIN THROW 50001, 'This instructor did not create this exam', 1; RETURN; END
 
 
     -- Cannot modify after exam has started
@@ -817,10 +856,14 @@ BEGIN
            EndTime     = ISNULL(@EndTime,     EndTime),
            TotalTime   = ISNULL(@TotalTime,   TotalTime),
            TotalDegree = ISNULL(@TotalDegree, TotalDegree),
-           ExamTypeId  = ISNULL(@ExamTypeId,  ExamTypeId)
+           ExamTypeId  = ISNULL(@ExamTypeId,  ExamTypeId),
+		   ExamTitle   = ISNULL(@ExamTitle,  ExamTitle)
     WHERE  ExamId = @ExamId;
 END
 GO
+
+
+
 
 -- usp_DeleteExam
 CREATE OR ALTER PROCEDURE ExamSystem.usp_DeleteExam
@@ -831,10 +874,11 @@ BEGIN
     IF [CoreSystem].[fn_CheckUserRole](@ExecutingUserId, 2) = 0
 	BEGIN THROW 50001, 'Access Denied', 1; RETURN; 	END
 
-	-- check if executing instructor who pu exam
-	if not exists (select 1 from ExamSystem.Exam as e 
-	where e.ExamId =@ExamId and e.InstructorId =@ExecutingUserId  )
-	begin throw 50001 , 'this instructor not put this exam' ,1 ; return ; end
+-- Check if executing instructor who put this exam
+IF NOT EXISTS (SELECT 1 FROM ExamSystem.Exam e
+    INNER JOIN Academic.Instructor i ON i.InstructorId = e.InstructorId
+    WHERE e.ExamId = @ExamId AND i.UserId = @ExecutingUserId )
+BEGIN THROW 50001, 'This instructor did not create this exam', 1; RETURN; END
 
     IF EXISTS (
         SELECT 1 FROM ExamSystem.StudentExam
@@ -856,7 +900,9 @@ CREATE OR ALTER PROCEDURE ExamSystem.usp_GenerateExamQuestions_Random
     @ExecutingUserId INT,
     @ExamId          INT,
     @MCQ_Count       INT = 0,
-    @TF_Count        INT = 0
+    @TF_Count        INT = 0,
+	@DegreeMCQ int =0 ,
+	@DegreeTF int =0  
 AS
 BEGIN
     SET XACT_ABORT ON;
@@ -865,10 +911,11 @@ BEGIN
     IF CoreSystem.fn_CheckUserRole(@ExecutingUserId, 2) = 0
     BEGIN  THROW 50001, 'Access Denied', 1; return;  END
 
-    DECLARE @CourseId INT;
-    -- Ownership + get CourseId
-    SELECT @CourseId = CourseId FROM ExamSystem.Exam
-    WHERE ExamId = @ExamId AND InstructorId = @ExecutingUserId;
+DECLARE @CourseId INT;
+-- Ownership + get CourseId
+SELECT @CourseId = e.CourseId FROM ExamSystem.Exam e
+INNER JOIN Academic.Instructor i ON i.InstructorId = e.InstructorId
+WHERE e.ExamId = @ExamId AND i.UserId = @ExecutingUserId;
 
     IF @CourseId IS NULL
     BEGIN THROW 50002, 'Access Denied - You do not own this exam.', 1; return ; END;
@@ -899,7 +946,7 @@ BEGIN
 
     -- MCQ
     INSERT INTO ExamSystem.ExamQuestions (ExamId, QuestionId, QuestionDegree)
-    SELECT TOP (@MCQ_Count) @ExamId, qp.QuestionId, 0
+    SELECT TOP (@MCQ_Count) @ExamId, qp.QuestionId, @DegreeMCQ
     FROM ExamSystem.QuestionPool qp
     WHERE qp.CourseId = @CourseId
       AND qp.QustionTypeId = 1   -- MCQ TypeId
@@ -909,7 +956,7 @@ BEGIN
 
     -- TF
     INSERT INTO ExamSystem.ExamQuestions (ExamId, QuestionId, QuestionDegree)
-    SELECT TOP (@TF_Count) @ExamId, qp.QuestionId, 0
+    SELECT TOP (@TF_Count) @ExamId, qp.QuestionId, @DegreeTF
     FROM ExamSystem.QuestionPool qp
     WHERE qp.CourseId = @CourseId
       AND qp.QustionTypeId = 2   -- TF TypeId
@@ -942,10 +989,11 @@ BEGIN
     IF CoreSystem.fn_CheckUserRole(@ExecutingUserId, 2) = 0
     BEGIN THROW 50001, 'Access Denied', 1; END
 
-    DECLARE @CourseId INT;
-    -- Ownership + Get CourseId
-    SELECT @CourseId = CourseId FROM ExamSystem.Exam
-    WHERE ExamId = @ExamId AND InstructorId = @ExecutingUserId;
+DECLARE @CourseId INT;
+-- Ownership + get CourseId
+SELECT @CourseId = e.CourseId FROM ExamSystem.Exam e
+INNER JOIN Academic.Instructor i ON i.InstructorId = e.InstructorId
+WHERE e.ExamId = @ExamId AND i.UserId = @ExecutingUserId;
 
     IF @CourseId IS NULL
     BEGIN  THROW 50002, 'Access Denied - You do not own this exam.', 1; END
@@ -997,11 +1045,12 @@ BEGIN
     IF CoreSystem.fn_CheckUserRole(@ExecutingUserId, 2) = 0
     BEGIN THROW 50001, 'Access Denied', 1;   END
 
-    DECLARE @CourseId INT , @MaxDeg INT ,@CurrentTotal INT ;
-
-    --Ownership + Get CourseId
-    SELECT @CourseId = CourseId FROM ExamSystem.Exam
-    WHERE ExamId = @ExamId AND InstructorId = @ExecutingUserId;
+	declare  @MaxDeg INT ,@CurrentTotal INT ;
+	DECLARE @CourseId INT;
+-- Ownership + get CourseId
+SELECT @CourseId = e.CourseId FROM ExamSystem.Exam e
+INNER JOIN Academic.Instructor i ON i.InstructorId = e.InstructorId
+WHERE e.ExamId = @ExamId AND i.UserId = @ExecutingUserId;
 
     IF @CourseId IS NULL
     BEGIN THROW 50002, 'Access Denied - You do not own this exam.', 1;  END
@@ -1240,6 +1289,11 @@ BEGIN
 END
 GO
 
+
+
+
+
+
 -- usp_SearchExamsByInstructor
 CREATE OR ALTER PROCEDURE ExamSystem.usp_SearchExamsByInstructor
 	@ExecutingUserId INT,
@@ -1251,35 +1305,26 @@ BEGIN
     BEGIN THROW 50001, 'Access Denied', 1; END
 
     SELECT *
-    FROM dbo.vw_ExamSummary
+    FROM ExamSystem.vw_ExamSummary
     WHERE InstructorId = @InstructorId
       AND (@CourseId IS NULL OR CourseId = @CourseId);
 END
 GO
 
 
--->>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
--- usp_GetStudentExamHistory
-CREATE OR ALTER PROCEDURE dbo.usp_GetStudentExamHistory
-    @StudentId INT
-AS
-BEGIN
-    SET NOCOUNT ON;
-    SELECT *
-    FROM   dbo.vw_StudentExamResults
-    WHERE  StudentId = @StudentId
-    ORDER BY ExamId DESC;
-END
-GO
+
 
 -- usp_GetCourseQuestionPool
-CREATE OR ALTER PROCEDURE dbo.usp_GetCourseQuestionPool
+CREATE OR ALTER PROCEDURE ExamSystem.usp_GetCourseQuestionPool
+	@ExecutingUserId INT,
     @CourseId       INT,
     @QuestionTypeId INT = NULL
 AS
 BEGIN
-    SET NOCOUNT ON;
+    IF CoreSystem.fn_CheckUserRole(@ExecutingUserId, 2) = 0
+    BEGIN THROW 50001, 'Access Denied', 2; END
+
     SELECT
         qp.QuestionId,
         qp.Question,
@@ -1296,15 +1341,46 @@ BEGIN
 END
 GO
 
--- usp_GetExamResults
-CREATE OR ALTER PROCEDURE dbo.usp_GetExamResults
+
+
+
+
+
+
+
+
+
+CREATE OR ALTER PROCEDURE ExamSystem.usp_GetExamResults
+@ExecutingUserId INT,
     @ExamId INT
 AS
 BEGIN
-    SET NOCOUNT ON;
-    SELECT *
-    FROM   dbo.vw_StudentExamResults
-    WHERE  ExamId = @ExamId
+    IF CoreSystem.fn_CheckUserRole(@ExecutingUserId, 2) = 0
+    BEGIN THROW 50001, 'Access Denied', 1; END
+
+    SELECT 
+        e.ExamId,
+        se.StudentExamId,
+        s.StudentId,
+        ua.UserName AS StudentName,
+        SUM(ISNULL(sa.GivinMark, 0)) AS StudentScore,
+        e.TotalDegree
+    FROM ExamSystem.Exam e
+    INNER JOIN ExamSystem.StudentExam se
+        ON se.ExamId = e.ExamId
+    INNER JOIN Academic.Student s
+        ON s.StudentId = se.StudentId
+    INNER JOIN CoreSystem.UserAccount ua
+        ON ua.UserId = s.UserId
+    LEFT JOIN ExamSystem.StudentAnswer sa
+        ON sa.StudentExamId = se.StudentExamId
+    WHERE e.ExamId = @ExamId
+    GROUP BY 
+        e.ExamId,
+        se.StudentExamId,
+        s.StudentId,
+        ua.UserName,
+        e.TotalDegree
     ORDER BY StudentScore DESC;
 END
 GO
