@@ -98,7 +98,8 @@ constraint fkExam_InstructorId foreign key(InstructorId) references Academic.Ins
 on delete cascade on update cascade 
 )
 
-
+alter table ExamSystem.Exam
+add constraint checkExam_ExamDate check (ExamDate >= getdate())
 
 
 
