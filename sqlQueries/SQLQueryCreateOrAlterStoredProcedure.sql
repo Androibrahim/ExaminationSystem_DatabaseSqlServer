@@ -409,9 +409,46 @@ BEGIN THROW 50001, 'Access Denied - You do not own this exam.', 1;  RETURN; END
 END
 GO
 
--- we need to create function  AssignStudentToExam and set allow == false
 
+-- automatic examToStudent
+CREATE TYPE Academic.StudentIdList AS TABLE
+(
+    StudentId INT
+);
+GO
 
+CREATE OR ALTER PROCEDURE Academic.usp_AssignStudentsToExam
+    @ExecutingUserId INT,
+    @ExamId INT,
+    @Students Academic.StudentIdList READONLY
+AS
+BEGIN
+
+    -- Check role
+    IF [CoreSystem].[fn_CheckUserRole](@ExecutingUserId, 2) = 0
+    BEGIN THROW 50001, 'Access Denied', 1;  RETURN; END
+
+    -- Check that Instructor owns the Exam
+    IF NOT EXISTS (SELECT 1 FROM ExamSystem.Exam e
+        INNER JOIN Academic.Instructor i  ON i.InstructorId = e.InstructorId    
+        WHERE e.ExamId = @ExamId   AND i.UserId = @ExecutingUserId  )
+    BEGIN THROW 50001, 'Access Denied - You do not own this exam.', 1;   RETURN;    END
+
+    -- Insert students who are not assigned
+    INSERT INTO ExamSystem.StudentExam (StudentId, ExamId, IsAllow, IsComplete)
+    SELECT s.StudentId, @ExamId, 1, 0
+    FROM @Students s
+    WHERE NOT EXISTS (   SELECT 1 FROM ExamSystem.StudentExam se
+      WHERE se.StudentId = s.StudentId AND se.ExamId = @ExamId );
+
+    -- Update students already assigned
+    UPDATE se
+    SET IsAllow = 1
+    FROM ExamSystem.StudentExam se
+    INNER JOIN @Students s ON se.StudentId = s.StudentId    
+    WHERE se.ExamId = @ExamId;
+END
+GO
 
 -- ============================================================
 --  SECTION 4 – Course & Academic Structure
