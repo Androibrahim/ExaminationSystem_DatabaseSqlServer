@@ -164,6 +164,15 @@ EXEC Academic.usp_AssignStudentToExam
     @ExamId          = 1;
 GO
 
+--automaitc assignment student 
+DECLARE @Students Academic.StudentIdList;
+
+INSERT INTO @Students VALUES (1),(2),(3),(4),(5);
+
+EXEC Academic.usp_AssignStudentsToExam
+     @ExecutingUserId = 2,
+     @ExamId = 10,
+     @Students = @Students;
 
 -- ============================================================
 --  SECTION 4 – Course & Academic Structure

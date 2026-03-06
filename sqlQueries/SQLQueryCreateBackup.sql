@@ -5,7 +5,7 @@ GO
 CREATE OR ALTER PROCEDURE dbo.usp_DailyBackup
 AS
 BEGIN
-    DECLARE @BackupPath NVARCHAR(500) = 'F:\develop\ITI dotNet Full Stack\prjects\sql Project\Backups\';
+    DECLARE @BackupPath NVARCHAR(500) = 'F:\develop\ITI dotNet Full Stack\prjects\sql Project\dalilyBackups\';
     DECLARE @FileName NVARCHAR(500);
     DECLARE @BackupName NVARCHAR(200);
     DECLARE @CurrentDate NVARCHAR(50);
@@ -19,12 +19,8 @@ BEGIN
         TO DISK = @FileName
         WITH FORMAT, INIT, NAME = @BackupName, COMPRESSION, STATS = 10;
         
-        INSERT INTO CoreSystem.AuditLog (TableName, Operation, ChangedData)
-        VALUES ('Database', 'BACKUP', 'File: ' + @FileName);
     END TRY
     BEGIN CATCH
-        INSERT INTO CoreSystem.AuditLog (TableName, Operation, ChangedData)
-        VALUES ('Database', 'BACKUP_ERROR', ERROR_MESSAGE());
         THROW;
     END CATCH
 END
@@ -35,7 +31,7 @@ CREATE OR ALTER PROCEDURE dbo.usp_ManualBackup
     @BackupType NVARCHAR(10) = 'FULL'
 AS
 BEGIN
-    DECLARE @BackupPath NVARCHAR(500) = 'F:\develop\ITI dotNet Full Stack\prjects\sql Project\Backups\';
+    DECLARE @BackupPath NVARCHAR(500) = 'F:\develop\ITI dotNet Full Stack\prjects\sql Project\dalilyBackups\';
     DECLARE @FileName NVARCHAR(500);
     DECLARE @BackupName NVARCHAR(200);
     DECLARE @CurrentDate NVARCHAR(50);
